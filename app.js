@@ -77,20 +77,27 @@ const style = new PIXI.TextStyle({
     fill: '0xF6F3F2',
 });
 
+
 // Tiles! 
 // Idea: Make self contained tile objects that can exist alone, but interact with their neighbors
 // when the need arises. Each tile will contain the logic necessary to be a well behaved tile
 // and interact with other tiles. Additionally, drawing and animating will be handled individually
 // by each tile. 
-function Tile(x, y, value) {
+function Tile(x, y, value, id) {
+    this.id = id;
     board[x][y] = this;
     this.value = value; // numerical value displayed on the tile 
-    this.left = null; // adjacent tiles
-    this.above = null;
-    this.right = null;
-    this.below = null;
     this.x = x; // location on the game board 
     this.y = y;
+
+    this.execute = function() {
+        app.stage.removeChild(myContainer);
+    }
+
+    if (x - 1 >= 0) this.left = board[x - 1][y];
+    if (y - 1 >= 0) this.up = board[x][y - 1];
+    if (x + 1 < tileCount) this.right = board[x + 1][y];
+    if (y + 1 < tileCount) this.down = board[x][y + 1];
 
     // Each tile has a container that holds the drawing of the tile and its current value 
     const myContainer = new PIXI.Container();
@@ -105,9 +112,6 @@ function Tile(x, y, value) {
         cornerAngle)
     .endFill(); 
 
-    // offsetX + (tilePadding * (this.x + 1)) + (tileSize * this.x),
-    //     offsetY + (tilePadding * (this.y + 1)) + (tileSize * this.y),
-
     // Create text to display numerical value of this tile
     const myText = new PIXI.Text(value, style); // global style object at this point. refactor? 
         app.stage.addChild(myText); 
@@ -116,9 +120,6 @@ function Tile(x, y, value) {
             (tileSize / 2))
         myText.anchor.x = 0.5;
         myText.anchor.y = 0.5;
-
-        // offsetX + (tilePadding * (this.x + 1)) + (tileSize * this.x) + (tileSize / 2),
-        //     offsetY + (tilePadding * (this.y + 1)) + (tileSize * this.y) + (tileSize / 2))
 
     // Add elements to container, then container to main stage 
     myContainer.addChild(myRectangle);
@@ -129,121 +130,134 @@ function Tile(x, y, value) {
         offsetX + (tilePadding * (this.x + 1)) + (tileSize * this.x),
         offsetY + (tilePadding * (this.y + 1)) + (tileSize * this.y));
     app.stage.addChild(myContainer);
+    
+    // Check to the left for combining tiles 
+    this.checkForCollapse = function () {
+        // See if neighbor to the left wants to combine powers 
+        if (this.left.value == this.value) {
+            this.value = this.value * 3; 
+            myText.text = this.value;
+            console.log("my id is: " + this.id + ", and my value is: " + myText.text + ", and my coordinate is: " + this.x)
+
+            if (this.left.left != null) { // cut out the middle man 
+                this.left = this.left.left; 
+                this.left.right = this;
+            } else {
+                this.left = null;
+            }
+
+           
+            board[this.x - 1][this.y].execute();
+            board[this.x - 1][this.y] = null;
+            
+            if (this.left != null) {
+                this.left.move('right');
+                this.left.checkForCollapse();
+            }
+        }
+        
+    }
 
     this.move = function(direction) {
-        this.powerMove(this.x, this.y, direction);
+        this.powerMove(direction);
     }
 
     // currently moves the squares to the right to location specified by destination
-    this.powerMove = function (x, y, direction) {
-        if (direction == 'right' && board[x + 1][y] == null) {
-            board[x][y] = null;
-            var speed = 5;
-            let id = null;
-            clearInterval(id);
-            id = setInterval(frame, speed);
-            function frame() {
-                var destInPixels = offsetX + (tilePadding * ((x + 1) + 1)) + (tileSize * (x + 1));
-                if (myContainer.x + speed < destInPixels) {
-                    myContainer.x += speed;
-                } else {
-                    myContainer.x = destInPixels;
-                    clearInterval(id);
+    this.powerMove = function (theDirection) {
+        var myTileSpeed = 4;
+        var myRefreshRate = 5;
+        let myInterval = null;
+        clearInterval(myInterval);
+
+        // Slide to the right
+        if (theDirection == 'right') {
+            if (this.x + 1 < tileCount && board[this.x + 1][this.y] == null) {
+                var myDestination = offsetX + (tilePadding * ((this.x + 1) + 1)) + (tileSize * (this.x + 1));
+
+                board[this.x][this.y] = null;
+                this.x = this.x + 1;
+                board[this.x][this.y] = this;
+
+                myInterval = setInterval(frame, myRefreshRate);
+
+                function frame() {
+                    if (myContainer.x + myTileSpeed < myDestination) {
+                        myContainer.x += myTileSpeed;
+                    } else {
+                        myContainer.x = myDestination;
+                        clearInterval(myInterval);
+                    }
                 }
-            }
-            x = x + 1;
-            if (x + 2 < tileCount) {
-                this.powerMove(x + 1, y, 'right');
-            } else {
-                board[x + 1][y] = this;
-            }
-        } else if (direction == 'down' && board[x][y + 1] == null) {
-            board[x][y] = null;
-            var speed = 5;
-            let id = null;
-            clearInterval(id);
-            id = setInterval(frame, speed);
-            function frame() {
-                var destInPixels = offsetY + (tilePadding * ((y + 1) + 1)) + (tileSize * (y + 1));
-                if (myContainer.y + speed < destInPixels) {
-                    myContainer.y += speed;
-                } else {
-                    myContainer.y = destInPixels;
-                    clearInterval(id);
+
+                // make sure your neighbor to the left follows you 
+                if (this.left != null) {
+                    this.left.move('right');
                 }
+
+                // if there is another space to the right, move again
+                if (this.x + 1 < tileCount) {
+                    this.powerMove('right');
+                } 
+
             }
-            y = y + 1;
-            if (y + 2 < tileCount) {
-                this.powerMove(x, y + 1, 'down');
-            } else {
-                board[x][y + 1] = this;
-            }
-        } else if (direction == 'left' && board[x - 1][y] == null) {
-            board[x][y] = null;
-            var speed = -5;
-            let id = null;
-            clearInterval(id);
-            id = setInterval(frame, 5);
-            function frame() {
-                var destInPixels = offsetX + (tilePadding * ((x - 1) + 1)) + (tileSize * (x - 1));
-                if (myContainer.x + speed > destInPixels) {
-                    myContainer.x += speed;
-                } else {
-                    myContainer.x = destInPixels;
-                    clearInterval(id);
-                }
-            }
-            x = x - 1;
-            if (x - 2 > 0) {
-                this.powerMove(x - 1, y, 'left');
-            } else {
-                board[x - 1][y] = this;
-            }
-        } else if (direction == 'up' && board[x][y - 1] == null) {
-            board[x][y] = null;
-            var speed = -5;
-            let id = null;
-            clearInterval(id);
-            id = setInterval(frame, 5);
-            function frame() {
-                var destInPixels = offsetY + (tilePadding * ((y - 1) + 1)) + (tileSize * (y - 1));
-                if (myContainer.y + speed > destInPixels) {
-                    myContainer.y += speed;
-                } else {
-                    myContainer.y = destInPixels;
-                    clearInterval(id);
-                }
-            }
-            y = y - 1;
-            if (y - 2 > 0) {
-                this.powerMove(x, y - 1, 'up');
-            } else {
-                board[x][y - 1] = this;
-            }
+
+            // if (this.x + 1 == tileCount && reachedEnd == false) {
+            //     reachedEnd = true;
+            // console.log("my ID: " + this.id + ", my value is: " + this.value + ", my x coord is: " + this.x)
+            //     this.checkForCollapse();
+            // }
+
+
+            // Check up on your neighbors 
+            if (this.x - 1 >= 0) this.left = board[this.x - 1][this.y];
+            if (this.y - 1 >= 0) this.up = board[this.x][this.y - 1];
+            if (this.x + 1 < tileCount) this.right = board[this.x + 1][this.y];
+            if (this.y + 1 < tileCount) this.down = board[this.x][this.y + 1];
+
         }
+        
+
+        // } else if (theDirection == 'down' && board[theX][theY + 1] == null) {
+       
+        // } else if (theY - 1 >= 0 && theDirection == 'left' && board[theX - 1][theY] == null) {
+     
+        // } else if (theDirection == 'up' && board[theX][theY - 1] == null) {
+       
+        // }
     }
 }
 
 document.addEventListener('keydown', function(e) {
     if (e.key ==='ArrowRight') {
-        u.move('right');
+        z.move('right');
+        z.checkForCollapse();
+        // v = new Tile(0,0,3, 10);
+        // h = new Tile(2,0,3, 30);
     } else if (e.key === 'ArrowLeft') {
-        u.move('left');
+        console.log(board)
+    
     } else if (e.key === 'ArrowUp') {
-        u.move('up');
-    } else if (e.key === 'ArrowDown') {
-        u.move('down');
+        x =new Tile(0,0,76, 800);
+    } 
+    else if (e.key === 'ArrowDown') {
+        x.move('right');
     }
 })
 
 
 // just for testing
-var u = new Tile(4,4,1);
+var x;
+var v = new Tile(0,0,3, 10);
+var q = new Tile(1,0,3, 20);
+var h = new Tile(2,0,3, 30);
+var z = new Tile(3,0,3, 40);
+
+
 
 // u.move('up');
 // u.move('down');
 // u.move('left');
-u.move('right');
+// u.move('right');
 
 
 // board[0][0] = t;
