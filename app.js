@@ -16,9 +16,9 @@ colorMap.set(27, 0xDC58B5);
 colorMap.set(81, 0xDCC558);
 colorMap.set(243, 0xEE4040);
 colorMap.set(729, 0xDC8958);
-colorMap.set(2187, 0xd47239);
+colorMap.set(2187, 0x3abdb0);
 
-
+var score = 0;
 
 // make "canvas" position static
 app.renderer.view.style.position = 'absolute';
@@ -30,7 +30,7 @@ document.body.appendChild(app.view);
 const Graphics = PIXI.Graphics;
 
 // number of tiles horizontally and vertically 
-var tileCount = 6;
+var tileCount = 4;
 
 // used to turn gameplay off while tiles are moving and loading
 var canPlay = true; 
@@ -55,8 +55,8 @@ rectangle.beginFill(0xA8A5A5)
 app.stage.addChild(rectangle); 
 
 // tile grid dimensions
-var tileSize = (boardDimensions * .8) / 9;
-var tilePadding = (boardDimensions * .2) / 10;
+var tileSize = (boardDimensions * .8) / tileCount;
+var tilePadding = (boardDimensions * .2) / (tileCount + 1);
 
 // Draw tile slots on the board
 for (let i = 0; i < tileCount; i++) {
@@ -103,7 +103,6 @@ function Tile(x, y, value, id) {
     this.value = value; // numerical value displayed on the tile 
     this.x = x; // location on the game board 
     this.y = y;
-
 
     this.execute = function() {
         app.stage.removeChild(myContainer);
@@ -171,6 +170,41 @@ function Tile(x, y, value, id) {
         offsetX + (tilePadding * (this.x + 1)) + (tileSize * this.x),
         offsetY + (tilePadding * (this.y + 1)) + (tileSize * this.y));
     app.stage.addChild(myContainer);
+
+    this.spawnAnimation = function() {
+        let mySpawnInterval = null;
+        var myRefreshRate = 10;
+        var myGrowthRate = tileSize * 0.05;
+        var myOffsetRate = myGrowthRate / 2;
+        myRectangle.width = tileSize * 0.5;
+        myRectangle.height = myRectangle.width;
+
+        var x = myContainer.x;
+        var y = myContainer.y;
+
+        myContainer.x = myContainer.x + (tileSize * 0.25);
+        myContainer.y = myContainer.y + (tileSize * 0.25);
+
+        mySpawnInterval = setInterval(frame, myRefreshRate);
+
+        function frame() {
+            if (myRectangle.width + myGrowthRate < tileSize) {
+                myRectangle.width += myGrowthRate;
+                myRectangle.height = myRectangle.width;
+                myContainer.x -= myOffsetRate;
+                myContainer.y -= myOffsetRate;
+            } else {
+                myRectangle.width = tileSize;
+                myRectangle.height = myRectangle.width; 
+                myContainer.x = x;
+                myContainer.y = y;
+                clearInterval(mySpawnInterval);
+            }
+        }
+    }
+
+    this.spawnAnimation();
+    
     
     // Check neighboring tile's value. If this tile and the neighboring tile share the same value,
     // this tile and the neighboring tile collapse into a single tile, with a new value.
@@ -193,6 +227,7 @@ function Tile(x, y, value, id) {
             if (this.left != null) {
                 this.left.move('right');
             }
+            score += this.value;
         }
         if (theDirection == 'right' && this.left != null) {
             this.left.checkForCollapse('right');
@@ -215,6 +250,7 @@ function Tile(x, y, value, id) {
             if (this.right != null) {
                 this.right.move('left');
             }
+            score += this.value;
         }
         if (theDirection == 'left' && this.right != null) {
             this.right.checkForCollapse('left');
@@ -236,6 +272,7 @@ function Tile(x, y, value, id) {
             if (this.up != null) {
                 this.up.move('down');
             }
+            score += this.value;
         }
         if (theDirection == 'down' && this.up != null) {
             this.up.checkForCollapse('down');
@@ -257,6 +294,7 @@ function Tile(x, y, value, id) {
             if (this.down != null) {
                 this.down.move('up');
             }
+            score += this.value;
         }
         if (theDirection == 'up' && this.down != null) {
             this.down.checkForCollapse('up');
@@ -269,10 +307,15 @@ function Tile(x, y, value, id) {
             tileSize,
             cornerAngle)
             .endFill(); 
+        
+        if (this.value == 6561) {
+            window.alert("Good work, you win!")
+        }
 
     }
 
-    // refactor
+
+   
 
     // currently moves the squares to the right to location specified by destination
     // can refactor to remove a bunch of duplicated code
@@ -549,21 +592,13 @@ document.addEventListener('keydown', function (e) {
         } else if (e.key === 'ArrowDown') {
             slideAll('down');
         }
-        if (e.key === 'b') {
-            console.log(board);
-        } else if (e.key ==='a') {
-            console.log(availableSpaces);
-        } else {
+        
         setTimeout(function () {
             randomTiles(0);
+            canPlay = true;
         }, 500);
     }
-    canPlay = true;
-    }
 })
-
-
-
 
 randomTiles();
 
