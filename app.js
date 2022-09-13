@@ -35,7 +35,6 @@ var tileCount = 4;
 // used to turn gameplay off while tiles are moving and loading
 var canPlay = true; 
 
-
 // dimensions for drawing the main game play area
 var boardDimensions = window.innerHeight * 0.85;
 var offsetX = (window.innerWidth - boardDimensions) / 2;
@@ -74,13 +73,52 @@ for (let i = 0; i < tileCount; i++) {
     }
 }
 
-
 // Create 2-D array to represent the game board. Initially set all cells to null 
 var board = [];
 for (var i = 0; i < tileCount; i++) {
     board[i] = [];
     for (var j = 0; j < tileCount; j++) {
         board[i][j] = null;
+    }
+}
+
+// Arrays used to store important information about the state of the board and it's tiles 
+var availableSpaces;
+var canMoveLeft;
+var canMoveRight;
+var canMoveUp;
+var canMoveDown;
+
+function assessTheBoard() {
+    availableSpaces = [];
+    canMoveLeft = [];
+    canMoveRight = [];
+    canMoveUp = [];
+    canMoveDown = [];
+
+    for (var i = 0; i < tileCount; i++) {
+        for (var j = 0; j < tileCount; j++) {
+            if (board[i][j] == null) {
+                availableSpaces.push({ //  find all available spots
+                    x: i,
+                    y: j
+                })
+            } else {
+                board[i][j].updateNeighbors();
+                if (i > 0 && board[i][j].left == null) { // find which tiles can move in each direction 
+                    canMoveLeft.push(board[i][j]);
+                }
+                if (i < tileCount - 1 && board[i][j].right == null) {
+                    canMoveRight.push(board[i][j]);
+                }
+                if (j < tileCount - 1 && board[i][j].down == null) {
+                    canMoveDown.push(board[i][j]);
+                }
+                if (j > 0 && board[i][j].up == null) {
+                    canMoveUp.push(board[i][j]);
+                }
+            }
+        }
     }
 }
 
@@ -91,13 +129,13 @@ const style = new PIXI.TextStyle({
     fill: '0xF6F3F2',
 });
 
-
 // Tiles! 
-// Idea: Make self contained tile objects that can exist alone, but interact with their neighbors
-// when the need arises. Each tile will contain the logic necessary to be a well behaved tile
+// Create a self contained tile objects exist alone, but interacts with its neighbors
+// when the need arises. Contains the logic necessary to be a well behaved tile
 // and interact with other tiles. Additionally, drawing and animating will be handled individually
 // by each tile. 
 function Tile(x, y, value, id) {
+    this.collapsed = false; 
     this.id = id;
     board[x][y] = this;
     this.value = value; // numerical value displayed on the tile 
@@ -142,7 +180,6 @@ function Tile(x, y, value, id) {
     // Each tile has a container that holds the drawing of the tile and its current value 
     const myContainer = new PIXI.Container();
 
-
     // Create and draw the rectangle/main shape of the tile 
     const myRectangle = new Graphics(); 
     myRectangle.beginFill(colorMap.get(this.value))
@@ -171,6 +208,7 @@ function Tile(x, y, value, id) {
         offsetY + (tilePadding * (this.y + 1)) + (tileSize * this.y));
     app.stage.addChild(myContainer);
 
+    // Animates the creation of the tile
     this.spawnAnimation = function() {
         let mySpawnInterval = null;
         var myRefreshRate = 10;
@@ -204,12 +242,10 @@ function Tile(x, y, value, id) {
     }
 
     this.spawnAnimation();
-    
-    
+
     // Check neighboring tile's value. If this tile and the neighboring tile share the same value,
     // this tile and the neighboring tile collapse into a single tile, with a new value.
     // The new value is the original value multiplied by three. 
-    // Need to refactor this a bit 
     this.checkForCollapse = function (theDirection) {
         // Called when 'move right' is called. Check neighbor to the left 
         if (theDirection == 'right' && this.left != null && this.left.value == this.value) {
@@ -228,18 +264,18 @@ function Tile(x, y, value, id) {
                 this.left.move('right');
             }
             score += this.value;
+            this.collapsed = true;
+
         }
         if (theDirection == 'right' && this.left != null) {
             this.left.checkForCollapse('right');
         }
 
-        // Called when 'move left' is called. Check neighbor to the right
-
         if (theDirection == 'left' && this.right != null && this.right.value == this.value) {
             this.value = this.value * 3;
             myText.text = this.value;
 
-            if (this.right.right != null) { // cut out the middle man 
+            if (this.right.right != null) { 
                 this.right = this.right.right;
                 this.right.left = this;
             } else {
@@ -251,17 +287,19 @@ function Tile(x, y, value, id) {
                 this.right.move('left');
             }
             score += this.value;
+            this.collapsed = true;
+
+
         }
         if (theDirection == 'left' && this.right != null) {
             this.right.checkForCollapse('left');
         }
 
-        // Called when 'move down' is called. Check neighbor to the up  
         if (theDirection == 'down' && this.up != null && this.up.value == this.value) {
             this.value = this.value * 3;
             myText.text = this.value;
 
-            if (this.up.up != null) { // cut out the middle man 
+            if (this.up.up != null) { 
                 this.up = this.up.up;
                 this.up.down = this;
             } else {
@@ -273,17 +311,19 @@ function Tile(x, y, value, id) {
                 this.up.move('down');
             }
             score += this.value;
+            this.collapsed = true;
+
+
         }
         if (theDirection == 'down' && this.up != null) {
             this.up.checkForCollapse('down');
         }
 
-        // Called when 'move up' is called. Check neighbor to the down
         if (theDirection == 'up' && this.down != null && this.down.value == this.value) {
             this.value = this.value * 3;
             myText.text = this.value;
 
-            if (this.down.down != null) { // cut out the middle man 
+            if (this.down.down != null) { 
                 this.down = this.down.down;
                 this.down.up = this;
             } else {
@@ -295,6 +335,9 @@ function Tile(x, y, value, id) {
                 this.down.move('up');
             }
             score += this.value;
+            this.collapsed = true;
+
+
         }
         if (theDirection == 'up' && this.down != null) {
             this.down.checkForCollapse('up');
@@ -314,15 +357,12 @@ function Tile(x, y, value, id) {
 
     }
 
-
-   
-
-    // currently moves the squares to the right to location specified by destination
-    // can refactor to remove a bunch of duplicated code
-    // just add parameters for directions, write the thing once instead of once for each direction?
+    // Move tile in theDirection, if possible. Notify neighbor to the direction opposite of theDirection
+    // that they should move as well. Creates a chain reaction, moving all tiles within a given
+    // row or column in theDirection. 
     this.move = function (theDirection) {
         var myTileSpeed = 4;
-        var myRefreshRate = 5;
+        var myRefreshRate = 1;
         let myInterval = null;
         clearInterval(myInterval);
 
@@ -358,7 +398,6 @@ function Tile(x, y, value, id) {
 
                 this.updateNeighbors();
             }
-
         } else if (theDirection == 'left') {
             if (this.x - 1 >= 0 && board[this.x - 1][this.y] == null) {
                 var myDestination = offsetX + (tilePadding * ((this.x - 1) + 1)) + (tileSize * (this.x - 1));
@@ -378,12 +417,10 @@ function Tile(x, y, value, id) {
                     }
                 }
 
-                // make sure your neighbor to the right follows you 
                 if (this.right != null) {
                     this.right.move('left');
                 }
 
-                // if there is another space to the left, move again
                 if (this.x - 1 >= 0) {
                     // console.log("my id is: " + this.id + ", and my x coordinate is: " + this.x)
                     this.move('left');
@@ -411,12 +448,10 @@ function Tile(x, y, value, id) {
                     }
                 }
 
-                // make sure your neighbor to the right follows you 
                 if (this.up != null) {
                     this.up.move('down');
                 }
 
-                // if there is another space to the left, move again
                 if (this.y + 1 < tileCount) {
                     this.move('down');
                 } 
@@ -444,12 +479,10 @@ function Tile(x, y, value, id) {
                     }
                 }
 
-                // make sure your neighbor to the right follows you 
                 if (this.down != null) {
                     this.down.move('up');
                 }
 
-                // if there is another space to the left, move again
                 if (this.y + 1 < tileCount) {
                     this.move('up');
                 } 
@@ -461,50 +494,10 @@ function Tile(x, y, value, id) {
     }
 }
 
-// Arrays used to store important information about the state of the board and it's tiles 
-var availableSpaces;
-var canMoveLeft;
-var canMoveRight;
-var canMoveUp;
-var canMoveDown;
-
-function assessTheBoard() {
-    availableSpaces = [];
-    canMoveLeft = [];
-    canMoveRight = [];
-    canMoveUp = [];
-    canMoveDown = [];
-
-    for (var i = 0; i < tileCount; i++) {
-        for (var j = 0; j < tileCount; j++) {
-            if (board[i][j] == null) {
-                availableSpaces.push({ //  find all available spots
-                    x: i,
-                    y: j
-                })
-            } else {
-                board[i][j].updateNeighbors();
-                if (i > 0 && board[i][j].left == null) { // find which tiles can move in each direction 
-                    canMoveLeft.push(board[i][j]);
-                }
-                if (i < tileCount - 1 && board[i][j].right == null) {
-                    canMoveRight.push(board[i][j]);
-                }
-                if (j < tileCount - 1 && board[i][j].down == null) {
-                    canMoveDown.push(board[i][j]);
-                }
-                if (j > 0 && board[i][j].up == null) {
-                    canMoveUp.push(board[i][j]);
-                }
-            }
-        }
-    }
-}
-
-const initialTileValues = [3, 9];
 // Creates randomly placed new tiles every turn, based on available spaces.
 // New tiles always have a value or 3 or 9. Can create 1, 2, or 3 new tiles. 
 function randomTiles(count) {
+    const initialTileValues = [3, 9];
     assessTheBoard();
     var value = initialTileValues[Math.floor(Math.random() * 2)];
 
@@ -514,13 +507,17 @@ function randomTiles(count) {
         board[newTileCoords.x][newTileCoords.y] = new Tile(newTileCoords.x, newTileCoords.y, value);
         availableSpaces.splice(index, 1);
 
-        if (count < 2 && Math.floor(Math.random() * 3) == 1) { 
+        if (count < 1 && Math.floor(Math.random() * 4) == 1) { 
             randomTiles(count + 1);                             
         }
     }
 }
 
+
+// Uses collections of tiles collected by assessBoard to move all movable tiles
+// on the board in the given direction. 
 function slideAll(direction) {
+    var collapseDelay = 25;
     if (direction == 'left') {
         for (var i = 0; i < canMoveLeft.length; i++) {
             canMoveLeft[i].move('left');
@@ -529,10 +526,9 @@ function slideAll(direction) {
             for (var i = 0; i < tileCount; i++) {
                 if (board[0][i] != null) {
                     board[0][i].checkForCollapse('left');
-                    assessTheBoard();
                 }
             }
-        }, 150);
+        }, collapseDelay);
     }
 
     if (direction == 'right') {
@@ -543,10 +539,9 @@ function slideAll(direction) {
             for (var i = 0; i < tileCount; i++) {
                 if (board[tileCount - 1][i] != null) {
                     board[tileCount - 1][i].checkForCollapse('right');
-                    assessTheBoard();
                 }
             }
-        }, 150);
+        }, collapseDelay);
     }
 
     if (direction == 'up') {
@@ -557,10 +552,9 @@ function slideAll(direction) {
             for (var i = 0; i < tileCount; i++) {
                 if (board[i][0] != null) {
                     board[i][0].checkForCollapse('up');
-                    assessTheBoard();
                 }
             }
-        }, 150);
+        }, collapseDelay);
     }
 
     if (direction == 'down') {
@@ -571,17 +565,19 @@ function slideAll(direction) {
             for (var i = 0; i < tileCount; i++) {
                 if (board[i][tileCount - 1] != null) {
                     board[i][tileCount - 1].checkForCollapse('down');
-                    assessTheBoard();
                 }
             }
-        }, 150);
+        }, collapseDelay);
     }
 }
 
+// Listens for key events, mainly the arrow keys. Tells the program to slide the tiles 
+// accordingly. Has a delay built in to avoid rapid button pressing. Also, calls for
+// additional random tiles after each move done by the player. 
 document.addEventListener('keydown', function (e) {
-    assessTheBoard();
     if (canPlay == true) {
         canPlay = false;
+        assessTheBoard();
 
         if (e.key === 'ArrowRight') {
             slideAll('right');
@@ -592,14 +588,16 @@ document.addEventListener('keydown', function (e) {
         } else if (e.key === 'ArrowDown') {
             slideAll('down');
         }
-        
         setTimeout(function () {
             randomTiles(0);
+        }, 250);
+        setTimeout(function () {
             canPlay = true;
-        }, 500);
+        }, 600);
     }
 })
 
+// Gets the game started with a random tile or two. 
 randomTiles();
 
 
