@@ -9,6 +9,7 @@ const app = new Application({
     backgroundColor: 0xF6F3F2,
     antialias: true
 }); 
+
 const colorMap = new Map();
 colorMap.set(3, 0x4287f5);
 colorMap.set(9, 0x68cc7f);
@@ -18,7 +19,8 @@ colorMap.set(243, 0xEE4040);
 colorMap.set(729, 0xDC8958);
 colorMap.set(2187, 0x3abdb0);
 
-var score = 0;
+var totalScore = 0;
+var isPlayable = true;
 
 // make "canvas" position static
 app.renderer.view.style.position = 'absolute';
@@ -31,40 +33,68 @@ const Graphics = PIXI.Graphics;
 
 // number of tiles horizontally and vertically 
 var tileCount = 4;
+var scoreCardCount = 10;
 
 // used to turn gameplay off while tiles are moving and loading
 var canPlay = true; 
+var gameOver = false; 
 
-// dimensions for drawing the main game play area
+// Dimensions of the game board and the score board areas 
 var boardDimensions = window.innerHeight * 0.85;
-var offsetX = (window.innerWidth - boardDimensions) / 2;
-var offsetY = window.innerHeight * 0.075;
+var scoreBoardWidth = boardDimensions / 2;
+var scoreBoardHeight = boardDimensions;
+
+// Dimensions for the tile grid within the game board 
+var tileSize = (boardDimensions * .8) / tileCount;
+var tilePadding = (boardDimensions * .2) / (tileCount + 1);
+
+// Dimensions for score card boxes within score board area 
+var scoreBoxesHeight = (scoreBoardHeight * 0.8) / scoreCardCount;
+var scoreBoxesPadding = (scoreBoardHeight * 0.2) / (scoreCardCount + 1);
+var scoreBoxesWidth = scoreBoardWidth - (2 * scoreBoxesPadding);
+
+// Offset lengths for the game board and score board areas 
+var boardOffsetX = (window.innerWidth - boardDimensions + scoreBoardWidth + tilePadding) / 2;
+var boardOffsetY = window.innerHeight * 0.075;
+var scoreBoardOffsetX = (window.innerWidth - (boardDimensions + scoreBoardWidth + tilePadding)) / 2;
+var scoreBoardOffsetY = boardOffsetY;
+
+// Corner angle used for rounded rectangles 
 var cornerAngle = 5;
 
 // Draw the game board
-const rectangle = new Graphics(); 
-rectangle.beginFill(0xA8A5A5) 
+const scoreBoardRectangle = new Graphics(); 
+scoreBoardRectangle.beginFill(0xA8A5A5) 
 .drawRoundedRect(
-    offsetX, 
-    offsetY, 
+    scoreBoardOffsetX, 
+    scoreBoardOffsetY, 
+    scoreBoardWidth, 
+    scoreBoardHeight,
+    cornerAngle) 
+.endFill(); 
+app.stage.addChild(scoreBoardRectangle); 
+
+// Draw the game board
+const gameRectangle = new Graphics(); 
+gameRectangle.beginFill(0xA8A5A5) 
+.drawRoundedRect(
+    boardOffsetX, 
+    boardOffsetY, 
     boardDimensions, 
     boardDimensions,
     cornerAngle) 
 .endFill(); 
-app.stage.addChild(rectangle); 
+app.stage.addChild(gameRectangle); 
 
-// tile grid dimensions
-var tileSize = (boardDimensions * .8) / tileCount;
-var tilePadding = (boardDimensions * .2) / (tileCount + 1);
-
+var scoreBoxes = [];
 // Draw tile slots on the board
 for (let i = 0; i < tileCount; i++) {
     for (let j = 0; j < tileCount; j++) {
         const rectangle = new Graphics(); 
         rectangle.beginFill(0xEEDADA) 
         .drawRoundedRect(
-            offsetX + (tilePadding * (i + 1)) + (tileSize * i), 
-            offsetY + (tilePadding * (j + 1)) + (tileSize * j), 
+            boardOffsetX + (tilePadding * (i + 1)) + (tileSize * i), 
+            boardOffsetY + (tilePadding * (j + 1)) + (tileSize * j), 
             tileSize, 
             tileSize,
             cornerAngle) 
@@ -89,7 +119,19 @@ var canMoveRight;
 var canMoveUp;
 var canMoveDown;
 
+function gameFinished() {
+    scoreBoxes[0].setText("Enter Name Here");
+    scoreBoxes[0].setButton();
+    canPlay = false;
+    gameOver = true;
+
+    
+}
+
+// Iterate through tiles on the board, and create arrays that contain tiles which currently
+// have the ability to move in each direction. 
 function assessTheBoard() {
+    isPlayable = false;
     availableSpaces = [];
     canMoveLeft = [];
     canMoveRight = [];
@@ -104,22 +146,36 @@ function assessTheBoard() {
                     y: j
                 })
             } else {
+
                 board[i][j].updateNeighbors();
+
                 if (i > 0 && board[i][j].left == null) { // find which tiles can move in each direction 
                     canMoveLeft.push(board[i][j]);
+                } else if (isPlayable == false && i > 0 && board[i][j].left.value == board[i][j].value) {
+                    isPlayable = true;
                 }
+
                 if (i < tileCount - 1 && board[i][j].right == null) {
                     canMoveRight.push(board[i][j]);
+                } else if (isPlayable == false && i < tileCount - 1 && board[i][j].right.value == board[i][j].value) {
+                    isPlayable = true;
                 }
+
                 if (j < tileCount - 1 && board[i][j].down == null) {
                     canMoveDown.push(board[i][j]);
+                } else if (isPlayable == false && j < tileCount - 1 && board[i][j].down.value == board[i][j].value) {
+                    isPlayable = true;
                 }
+
                 if (j > 0 && board[i][j].up == null) {
                     canMoveUp.push(board[i][j]);
+                } else if (isPlayable == false && j > 0 && board[i][j].up.value == board[i][j].value){
+                    isPlayable = true;
                 }
             }
         }
     }
+
 }
 
 // Text style used for numbers on the tiles 
@@ -129,14 +185,150 @@ const style = new PIXI.TextStyle({
     fill: '0xF6F3F2',
 });
 
+// Score box rectangles used for displaying the player's current score as well as
+// the leader board scores. 
+function ScoreBox(thePosition, theScore, theText) {
+    const myContainer = new PIXI.Container();
+    myScoreNum = theScore;
+    myInputBar = '|';
+    myText = theText;
+
+    // Create and draw the rectangle/main shape of the score box  
+    const myRectangle = new Graphics(); 
+    myRectangle.beginFill(colorMap.get(9))
+    .drawRoundedRect(
+        0,0,
+        scoreBoxesWidth,
+        scoreBoxesHeight,
+        cornerAngle)
+    .endFill(); 
+
+    // Text displayed on the score box 
+    const myDisplayText = new PIXI.Text(theText, style); 
+        myDisplayText.position.set(
+            ((scoreBoxesWidth / 18)),
+            (scoreBoxesHeight / 2))
+        myDisplayText.anchor.x = 0;
+        myDisplayText.anchor.y = 0.5;
+
+    // Score displayed on the score box 
+    const myScore = new PIXI.Text(theScore, style); 
+        myScore.position.set(
+            (scoreBoxesWidth - (scoreBoxesWidth / 18)),
+            (scoreBoxesHeight / 2))
+        myScore.anchor.x = 1;
+        myScore.anchor.y = 0.5;
+
+    // Add elements to container, then add container to main stage 
+    myContainer.addChild(myRectangle);
+    myContainer.addChild(myDisplayText);
+    myContainer.addChild(myScore);
+    // Position is calculated from within the bounds of the container of the main score board area 
+    myContainer.position.set(
+        scoreBoardOffsetX + scoreBoxesPadding,
+        scoreBoardOffsetY + (thePosition * scoreBoxesHeight) + ((thePosition + 1) * (scoreBoxesPadding))),
+    app.stage.addChild(myContainer);
+
+    this.setText = function(theText) {
+        myText = theText;
+        myDisplayText.text = myText;
+    }
+
+    this.addText = function(theText) {
+        myText += theText;
+        myDisplayText.text = myText;
+    }
+
+    this.setScore = function(theScore) {
+        myScore.text = theScore;
+    }
+
+    this.setColor = function (theColor) {
+        myRectangle.beginFill(theColor)
+            .drawRoundedRect(
+                0, 0,
+                scoreBoxesWidth,
+                scoreBoxesHeight,
+                cornerAngle)
+            .endFill();
+    }
+
+    this.setButton = function() {
+        myContainer.interactive = true;
+        myContainer.buttonMode = true; 
+        var alternate = true; 
+        var refreshRate = 500;
+
+        myContainer.on('pointerdown', function() {
+            listen();
+            myTypingInterval = setInterval(frame, refreshRate);
+            myText = '';
+
+            function frame() {
+                if (alternate == true) {
+                    alternate = false;
+                    myDisplayText.text = myText + myInputBar;
+                } else {
+                    alternate = true;
+                    myDisplayText.text = myText;
+                }
+
+                // NEED TO FIGURE OUT A WAY TO GET THIS TO STOP, IN THE FUTURE 
+                // if (canPlay == true) {
+                //     clearInterval(myTypingInterval);
+                // }
+            }
+        })
+
+    this.getTextLength = function() {
+        return myText.length;
+    }
+
+    this.backspace = function() {
+        myText = myText.slice(0, -1);
+    }
+
+        
+
+
+        
+    }
+
+
+}
+
+// Draw score board boxes on the score board 
+for (let i = 0; i < scoreCardCount; i++) {
+    // const rectangle = new Graphics();
+    // rectangle.beginFill(0xEEDADA)
+    //     .drawRoundedRect(
+    //         scoreBoardOffsetX + scoreBoxesPadding,
+    //         scoreBoardOffsetY + (i * scoreBoxesHeight) + ((i + 1) * (scoreBoxesPadding)) ,
+    //         scoreBoxesWidth,
+    //         scoreBoxesHeight,
+    //         cornerAngle)
+    //     .endFill();
+    // app.stage.addChild(rectangle);
+
+    var scoreBox = new ScoreBox(i);
+    scoreBoxes.push(scoreBox);
+}
+
+scoreBoxes[0].setText("Score: ")
+scoreBoxes[0].setScore(0)
+scoreBoxes[0].setColor(colorMap.get(27))
+scoreBoxes[1].setText("High Scores")
+scoreBoxes[1].setScore()
+scoreBoxes[1].setColor(colorMap.get(2187))
+
+
 // Tiles! 
 // Create a self contained tile objects exist alone, but interacts with its neighbors
 // when the need arises. Contains the logic necessary to be a well behaved tile
 // and interact with other tiles. Additionally, drawing and animating will be handled individually
 // by each tile. 
-function Tile(x, y, value, id) {
+function Tile(x, y, value) {
     this.collapsed = false; 
-    this.id = id;
     board[x][y] = this;
     this.value = value; // numerical value displayed on the tile 
     this.x = x; // location on the game board 
@@ -192,7 +384,6 @@ function Tile(x, y, value, id) {
 
     // Create text to display numerical value of this tile
     const myText = new PIXI.Text(value, style); 
-        app.stage.addChild(myText); 
         myText.position.set(
             (tileSize / 2),
             (tileSize / 2))
@@ -204,8 +395,8 @@ function Tile(x, y, value, id) {
     myContainer.addChild(myText);
     // Position is calculated from within the bounds of the container of the main game board 
     myContainer.position.set(
-        offsetX + (tilePadding * (this.x + 1)) + (tileSize * this.x),
-        offsetY + (tilePadding * (this.y + 1)) + (tileSize * this.y));
+        boardOffsetX + (tilePadding * (this.x + 1)) + (tileSize * this.x),
+        boardOffsetY + (tilePadding * (this.y + 1)) + (tileSize * this.y));
     app.stage.addChild(myContainer);
 
     // Animates the creation of the tile
@@ -251,6 +442,9 @@ function Tile(x, y, value, id) {
         if (theDirection == 'right' && this.left != null && this.left.value == this.value) {
             this.value = this.value * 3;
             myText.text = this.value;
+            totalScore += this.value;
+            scoreBoxes[0].setScore(totalScore);
+
 
             if (this.left.left != null) { // cut out the middle man 
                 this.left = this.left.left;
@@ -263,7 +457,6 @@ function Tile(x, y, value, id) {
             if (this.left != null) {
                 this.left.move('right');
             }
-            score += this.value;
             this.collapsed = true;
 
         }
@@ -274,6 +467,9 @@ function Tile(x, y, value, id) {
         if (theDirection == 'left' && this.right != null && this.right.value == this.value) {
             this.value = this.value * 3;
             myText.text = this.value;
+            totalScore += this.value;
+            scoreBoxes[0].setScore(totalScore);
+
 
             if (this.right.right != null) { 
                 this.right = this.right.right;
@@ -286,9 +482,7 @@ function Tile(x, y, value, id) {
             if (this.right != null) {
                 this.right.move('left');
             }
-            score += this.value;
             this.collapsed = true;
-
 
         }
         if (theDirection == 'left' && this.right != null) {
@@ -298,6 +492,9 @@ function Tile(x, y, value, id) {
         if (theDirection == 'down' && this.up != null && this.up.value == this.value) {
             this.value = this.value * 3;
             myText.text = this.value;
+            totalScore += this.value;
+            scoreBoxes[0].setScore(totalScore);
+
 
             if (this.up.up != null) { 
                 this.up = this.up.up;
@@ -310,7 +507,6 @@ function Tile(x, y, value, id) {
             if (this.up != null) {
                 this.up.move('down');
             }
-            score += this.value;
             this.collapsed = true;
 
 
@@ -322,6 +518,8 @@ function Tile(x, y, value, id) {
         if (theDirection == 'up' && this.down != null && this.down.value == this.value) {
             this.value = this.value * 3;
             myText.text = this.value;
+            scoreBoxes[0].setScore(totalScore);
+
 
             if (this.down.down != null) { 
                 this.down = this.down.down;
@@ -334,7 +532,6 @@ function Tile(x, y, value, id) {
             if (this.down != null) {
                 this.down.move('up');
             }
-            score += this.value;
             this.collapsed = true;
 
 
@@ -350,11 +547,10 @@ function Tile(x, y, value, id) {
             tileSize,
             cornerAngle)
             .endFill(); 
-        
-        if (this.value == 6561) {
-            window.alert("Good work, you win!")
-        }
 
+        if (this.value == 27) {
+            gameFinished();
+        }
     }
 
     // Move tile in theDirection, if possible. Notify neighbor to the direction opposite of theDirection
@@ -369,7 +565,7 @@ function Tile(x, y, value, id) {
         // Slide to the right
         if (theDirection == 'right') {
             if (this.x + 1 < tileCount && board[this.x + 1][this.y] == null) {
-                var myDestination = offsetX + (tilePadding * ((this.x + 1) + 1)) + (tileSize * (this.x + 1));
+                var myDestination = boardOffsetX + (tilePadding * ((this.x + 1) + 1)) + (tileSize * (this.x + 1));
 
                 board[this.x][this.y] = null;
                 this.x = this.x + 1;
@@ -400,7 +596,7 @@ function Tile(x, y, value, id) {
             }
         } else if (theDirection == 'left') {
             if (this.x - 1 >= 0 && board[this.x - 1][this.y] == null) {
-                var myDestination = offsetX + (tilePadding * ((this.x - 1) + 1)) + (tileSize * (this.x - 1));
+                var myDestination = boardOffsetX + (tilePadding * ((this.x - 1) + 1)) + (tileSize * (this.x - 1));
 
                 board[this.x][this.y] = null;
                 this.x = this.x - 1;
@@ -422,7 +618,6 @@ function Tile(x, y, value, id) {
                 }
 
                 if (this.x - 1 >= 0) {
-                    // console.log("my id is: " + this.id + ", and my x coordinate is: " + this.x)
                     this.move('left');
                 } 
 
@@ -431,7 +626,7 @@ function Tile(x, y, value, id) {
             }
         } else if (theDirection == 'down') {
             if (this.y + 1 < tileCount && board[this.x][this.y + 1] == null) {
-                var myDestination = offsetY + (tilePadding * ((this.y + 1) + 1)) + (tileSize * (this.y + 1));
+                var myDestination = boardOffsetY + (tilePadding * ((this.y + 1) + 1)) + (tileSize * (this.y + 1));
 
                 board[this.x][this.y] = null;
                 this.y = this.y + 1;
@@ -462,7 +657,7 @@ function Tile(x, y, value, id) {
 
         } else if (theDirection == 'up') {
             if (this.y - 1 >= 0 && board[this.x][this.y - 1] == null) {
-                var myDestination = offsetY + (tilePadding * ((this.y - 1) + 1)) + (tileSize * (this.y - 1));
+                var myDestination = boardOffsetY + (tilePadding * ((this.y - 1) + 1)) + (tileSize * (this.y - 1));
 
                 board[this.x][this.y] = null;
                 this.y = this.y - 1;
@@ -571,11 +766,30 @@ function slideAll(direction) {
     }
 }
 
+function listen() {
+    document.addEventListener('keydown', function (e) {
+        if ((/[a-zA-Z]/).test(e.key) && e.key.length == 1 && scoreBoxes[0].getTextLength() < 14) {
+            scoreBoxes[0].addText(e.key)
+        } else if(e.key === 'Backspace') {
+            scoreBoxes[0].backspace();
+        } else if (e.key === 'Enter') {
+            scoreBoxes[0].setText("Enter")
+            
+        }
+    });
+}
+
 // Listens for key events, mainly the arrow keys. Tells the program to slide the tiles 
 // accordingly. Has a delay built in to avoid rapid button pressing. Also, calls for
 // additional random tiles after each move done by the player. 
 document.addEventListener('keydown', function (e) {
-    if (canPlay == true) {
+    if (canPlay == true
+        && gameOver != true
+        && (e.key === 'ArrowRight' 
+        || e.key === 'ArrowLeft'
+        || e.key === 'ArrowUp'
+        || e.key === 'ArrowDown')) {
+
         canPlay = false;
         assessTheBoard();
 
@@ -588,12 +802,26 @@ document.addEventListener('keydown', function (e) {
         } else if (e.key === 'ArrowDown') {
             slideAll('down');
         }
-        setTimeout(function () {
-            randomTiles(0);
-        }, 250);
-        setTimeout(function () {
-            canPlay = true;
-        }, 600);
+
+        assessTheBoard();
+
+        
+        if (canMoveDown.length == 0
+            && canMoveUp.length == 0
+            && canMoveLeft.length == 0
+            && canMoveRight.length == 0
+            && isPlayable != true) {
+                scoreBoxes[0].setText("Enter Name Here")
+        } else {
+            setTimeout(function () {
+                randomTiles(0);
+            }, 250);
+            setTimeout(function () {
+                canPlay = true;
+            }, 600);
+        }
+
+
     }
 })
 
