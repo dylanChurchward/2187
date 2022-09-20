@@ -560,7 +560,7 @@ class Tile {
                     cornerAngle)
                 .endFill();
 
-            if (this.value == 6581) {
+            if (this.value == 6561) {
                 gameFinished();
             }
         };
