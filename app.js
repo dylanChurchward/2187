@@ -1,4 +1,3 @@
-// dependencies: npm install pixi.js
 
 const Application = PIXI.Application;
 
@@ -134,6 +133,8 @@ async function putLeaderboard(thePlayer, theScore) {
     });
 
     const scores = await response.json();
+
+    updateLeaderboard();
 }
 
 // Retrieve list of top 8 entries (sorted by score) from the leader board database 
@@ -835,7 +836,9 @@ document.addEventListener('keydown', function (e) {
 // the game state. 
 function startGame() {
     if (scoreBoxes != null) {
-        putLeaderboard(scoreBoxes[0].getText(), totalScore);
+        putLeaderboard(scoreBoxes[0].getText(), totalScore); // add new entry to the leader board database 
+
+        // execute/get rid of existing tiles 
         for (var i = 0; i < board.length; i++) {
             for (var j = 0; j < board.length; j++) {
                 if (board[i][j] != null) {
@@ -843,20 +846,30 @@ function startGame() {
                 }
             }
         }
+
+         // Collect new score boxes 
+        scoreBoxes = [];
+        for (let i = 0; i < scoreCardCount; i++) {
+            var scoreBox = new ScoreBox(i);
+            scoreBoxes.push(scoreBox);
+        }
+
+    } else {
+        // Collect new score boxes 
+        scoreBoxes = [];
+        for (let i = 0; i < scoreCardCount; i++) {
+            var scoreBox = new ScoreBox(i);
+            scoreBoxes.push(scoreBox);
+        }
+        updateLeaderboard()
     }
 
-    scoreBoxes = [];
+    // scoreBoxes = [];
     board = [];
     canPlay = true;
     isPlayable = true; 
     gameOver = false;
     totalScore = 0;
-
-    // Draw score board boxes on the score board 
-    for (let i = 0; i < scoreCardCount; i++) {
-        var scoreBox = new ScoreBox(i);
-        scoreBoxes.push(scoreBox);
-    }
 
     scoreBoxes[0].setText("Score: ")
     scoreBoxes[0].setScore(0)
@@ -865,8 +878,7 @@ function startGame() {
     scoreBoxes[1].setScore()
     scoreBoxes[1].setColor(colorMap.get(2187))
 
-    updateLeaderboard()
-
+    // Create a 2d array of slots for tiles, representing the game board 
     for (var i = 0; i < tileCount; i++) {
         board[i] = [];
         for (var j = 0; j < tileCount; j++) {
