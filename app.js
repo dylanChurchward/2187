@@ -146,10 +146,13 @@ async function updateLeaderboard() {
 
     const scores = await response.json();
 
+
     for (var i = 2; i < scoreBoxes.length; i++) {
-        // console.log(scores[i - 2].playername)
-        scoreBoxes[i].setText(scores[i - 2].playername);
-        scoreBoxes[i].setScore(scores[i - 2].score);
+
+        if (scores[i - 2] != null) {
+            scoreBoxes[i].setText(scores[i - 2].playername);
+            scoreBoxes[i].setScore(scores[i - 2].score);
+        }
     }
 }
 
